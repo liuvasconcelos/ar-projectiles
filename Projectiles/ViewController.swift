@@ -8,6 +8,7 @@
 
 import UIKit
 import ARKit
+import Each
 
 class ViewController: UIViewController, ARSCNViewDelegate {
 
@@ -18,7 +19,8 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     var basketAdded: Bool {
         return sceneView.scene.rootNode.childNode(withName: "Basket", recursively: false) != nil
     }
-    var power: Float = 1.0
+    var power: Int = 1
+    let timer = Each(0.05).seconds
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -31,6 +33,7 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
         sceneView.addGestureRecognizer(tap)
+        tap.cancelsTouchesInView = false
     }
 
     @objc func handleTap(sender: UITapGestureRecognizer) {
@@ -80,25 +83,44 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if self.basketAdded {
-            guard let pointOfView = self.sceneView.pointOfView else { return }
-            self.power = 10
-            let transform = pointOfView.transform
-            let location = SCNVector3(transform.m41, transform.m42, transform.m43)
-            let orientation = SCNVector3(-transform.m31, -transform.m32, -transform.m33)
-            let position = location + orientation
-            
-            let ball = SCNNode(geometry: SCNSphere(radius: 0.3))
-            ball.geometry?.firstMaterial?.diffuse.contents = UIImage(named: "ball")
-            ball.position = position
-            
-            let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball))
-            ball.physicsBody = body
-            ball.physicsBody?.applyForce(SCNVector3(orientation.x*power,
-                                                    orientation.y*power,
-                                                    orientation.z*power),
-                                         asImpulse: true)
-            sceneView.scene.rootNode.addChildNode(ball)
+            timer.perform { () -> NextStep in
+                self.power += 1
+                return .continue
+            }
         }
+    }
+    
+    func shootBall() {
+        guard let pointOfView = self.sceneView.pointOfView else { return }
+           self.power = 10
+           let transform = pointOfView.transform
+           let location = SCNVector3(transform.m41, transform.m42, transform.m43)
+           let orientation = SCNVector3(-transform.m31, -transform.m32, -transform.m33)
+           let position = location + orientation
+           
+           let ball = SCNNode(geometry: SCNSphere(radius: 0.3))
+           ball.geometry?.firstMaterial?.diffuse.contents = UIImage(named: "ball")
+           ball.position = position
+           
+           let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball))
+           ball.physicsBody = body
+           ball.physicsBody?.applyForce(SCNVector3(orientation.x * Float(power),
+                                                   orientation.y * Float(power),
+                                                   orientation.z * Float(power)),
+                                        asImpulse: true)
+           sceneView.scene.rootNode.addChildNode(ball)
+    }
+    
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if !basketAdded {
+            self.timer.stop()
+            self.shootBall()
+        }
+        self.power = 1
+    }
+    
+    deinit {
+        self.timer.stop()
     }
     
 }

@@ -1,0 +1,6 @@
+framework module Pods_ProjectilesTests {
+  umbrella header "Pods-ProjectilesTests-umbrella.h"
+
+  export *
+  module * { export * }
+}
