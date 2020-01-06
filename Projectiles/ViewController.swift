@@ -16,10 +16,8 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     @IBOutlet weak var planeDetectedLabel: UILabel!
     
     let configuration = ARWorldTrackingConfiguration()
-    var basketAdded: Bool {
-        return sceneView.scene.rootNode.childNode(withName: "Basket", recursively: false) != nil
-    }
-    var power: Int = 1
+    var basketAdded: Bool = false
+    var power: Float = 1
     let timer = Each(0.05).seconds
     
     override func viewDidLoad() {
@@ -47,23 +45,28 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     }
     
     func addBasket(hitTestResult: ARHitTestResult) {
-        let basketScene = SCNScene(named: "Basketball.scnassets/Basketball.scn")
-        let basketNode  = basketScene?.rootNode.childNode(withName: "Basket", recursively: false)
-        let positionOfPlane = hitTestResult.worldTransform.columns.3
-        
-        let xPosition = positionOfPlane.x
-        let yPosition = positionOfPlane.y
-        let zPosition = positionOfPlane.z
-        
-        basketNode?.position = SCNVector3(xPosition, yPosition, zPosition)
-        basketNode?.physicsBody = SCNPhysicsBody(type: .static,
-                                                 shape: SCNPhysicsShape(node: basketNode ?? SCNNode(),
-                                                                        options: [SCNPhysicsShape.Option.keepAsCompound : true,
-                                                                             SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
-        if let basketNode = basketNode {
-            self.sceneView.scene.rootNode.addChildNode(basketNode)
+        if !basketAdded {
+            let basketScene = SCNScene(named: "Basketball.scnassets/Basketball.scn")
+            let basketNode  = basketScene?.rootNode.childNode(withName: "Basket", recursively: false)
+            let positionOfPlane = hitTestResult.worldTransform.columns.3
+            
+            let xPosition = positionOfPlane.x
+            let yPosition = positionOfPlane.y
+            let zPosition = positionOfPlane.z
+            
+            basketNode?.position = SCNVector3(xPosition, yPosition, zPosition)
+            basketNode?.physicsBody = SCNPhysicsBody(type: .static,
+                                                     shape: SCNPhysicsShape(node: basketNode ?? SCNNode(),
+                                                                            options: [SCNPhysicsShape.Option.keepAsCompound: true,
+                                                                                 SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
+            if let basketNode = basketNode {
+                self.sceneView.scene.rootNode.addChildNode(basketNode)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.basketAdded = true
+                }
+            }
         }
-        
+    
     }
     
     @IBAction func addButtonClicked(_ sender: Any) {
@@ -84,7 +87,7 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if self.basketAdded {
             timer.perform { () -> NextStep in
-                self.power += 1
+                self.power = self.power + 1.0
                 return .continue
             }
         }
@@ -92,27 +95,29 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     
     func shootBall() {
         guard let pointOfView = self.sceneView.pointOfView else { return }
-           self.power = 10
-           let transform = pointOfView.transform
-           let location = SCNVector3(transform.m41, transform.m42, transform.m43)
-           let orientation = SCNVector3(-transform.m31, -transform.m32, -transform.m33)
-           let position = location + orientation
-           
-           let ball = SCNNode(geometry: SCNSphere(radius: 0.3))
-           ball.geometry?.firstMaterial?.diffuse.contents = UIImage(named: "ball")
-           ball.position = position
-           
-           let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball))
-           ball.physicsBody = body
-           ball.physicsBody?.applyForce(SCNVector3(orientation.x * Float(power),
-                                                   orientation.y * Float(power),
-                                                   orientation.z * Float(power)),
-                                        asImpulse: true)
-           sceneView.scene.rootNode.addChildNode(ball)
+        
+        self.removeOtherBalls()
+        let transform = pointOfView.transform
+        let location = SCNVector3(transform.m41, transform.m42, transform.m43)
+        let orientation = SCNVector3(-transform.m31, -transform.m32, -transform.m33)
+        let position = location + orientation
+        
+        let ball = SCNNode(geometry: SCNSphere(radius: 0.25))
+        ball.geometry?.firstMaterial?.diffuse.contents = UIImage(named: "ball")
+        ball.position = position
+        ball.name = "Basketball"
+        let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball))
+        body.restitution = 0.2  
+        ball.physicsBody = body
+        ball.physicsBody?.applyForce(SCNVector3(orientation.x * power,
+                                                orientation.y * power,
+                                                orientation.z * power),
+                                     asImpulse: true)
+        sceneView.scene.rootNode.addChildNode(ball)
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if !basketAdded {
+        if self.basketAdded {
             self.timer.stop()
             self.shootBall()
         }
@@ -121,6 +126,14 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     
     deinit {
         self.timer.stop()
+    }
+    
+    func removeOtherBalls() {
+        sceneView.scene.rootNode.enumerateChildNodes { (node, _) in
+            if node.name == "Basketball" {
+                node.removeFromParentNode()
+            }
+        }
     }
     
 }
